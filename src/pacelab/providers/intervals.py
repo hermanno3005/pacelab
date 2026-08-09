@@ -7,12 +7,14 @@ FIT cache, where the existing FitAdapter/GPX pipeline takes over.
 import base64
 import gzip
 import json
-import warnings
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 
 from pacelab.account import Account
 from pacelab.providers.http import Http
+
+log = logging.getLogger(__name__)
 
 _BASE = "https://intervals.icu/api/v1"
 _GZIP_MAGIC = b"\x1f\x8b"
@@ -109,8 +111,8 @@ class IntervalsProvider:
     def download(self, activity_id: str) -> Path | None:
         """Download an activity's original file into the account-keyed cache.
 
-        Returns the cached path, or ``None`` (with a warning) when no original is available
-        — e.g. Strava-synced activities, which intervals.icu can't serve (ADR-0008).
+        Returns the cached path, or ``None`` — skip-and-log at INFO — when no original is
+        available, e.g. Strava-synced activities intervals.icu can't serve (ADR-0008).
 
         Originals are immutable, so a cache hit never refetches — re-analysis passes
         (model bumps, ADR-0012 finalization) run network-free.
@@ -126,10 +128,9 @@ class IntervalsProvider:
             raise RuntimeError(f"intervals.icu download failed for {activity_id} (HTTP {resp.status})")
         if resp.status != 200:
             # 4xx: intervals.icu has no original for this activity (e.g. Strava-synced).
-            warnings.warn(
-                f"no original file for {activity_id} (HTTP {resp.status}) — skipping",
-                stacklevel=2,
-            )
+            # INFO, not WARNING: it recurs on every listing pass and is an expected skip,
+            # so flagging it would make a steady state look like a fault (ADR-0017).
+            log.info("no original file for %s (HTTP %s) — skipping", activity_id, resp.status)
             return None
         raw = resp.content
         if raw[:2] == _GZIP_MAGIC:

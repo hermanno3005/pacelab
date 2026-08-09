@@ -6,11 +6,13 @@ block) and tracked per (activity, model_version) — a recompute resets the mark
 leaves it unset so the next run retries.
 """
 
-import warnings
+import logging
 
 from pacelab.config import Config
 from pacelab.publish.annotation import render_annotation, splice_annotation
 from pacelab.store import ResultStore
+
+log = logging.getLogger(__name__)
 
 
 def publish_activity(provider, store: ResultStore, activity_id: str, model_version: str,
@@ -25,12 +27,17 @@ def publish_activity(provider, store: ResultStore, activity_id: str, model_versi
 
 def try_publish(provider, store: ResultStore, activity_id: str, model_version: str,
                 account_id: str) -> bool:
-    """Best-effort publish: never raises (a target outage must not fail a sync)."""
+    """Best-effort publish: never raises (a target outage must not fail a sync).
+
+    Logs rather than warns: under the watch loop the same activity can fail every tick for
+    days, and ``warnings.warn`` prints a given (message, location) once and then goes silent
+    (ADR-0017). This is a contained failure, so it stays clear of ``consecutive_failures``.
+    """
     try:
         publish_activity(provider, store, activity_id, model_version, account_id)
         return True
     except Exception as e:  # noqa: BLE001 — containment is the contract here
-        warnings.warn(f"publish failed for {activity_id}: {e}", stacklevel=2)
+        log.warning("publish failed for %s: %s", activity_id, e)
         return False
 
 

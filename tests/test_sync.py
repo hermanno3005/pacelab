@@ -1,3 +1,4 @@
+import logging
 import math
 
 from pacelab.analyze import ActivityResult
@@ -228,16 +229,18 @@ def test_sync_skips_current_downloads_new_and_stores(tmp_path):
     assert not store.needs_publish("i200", Config().model_version, account_id="acct")
 
 
-def test_publish_failure_does_not_fail_the_sync(tmp_path):
+def test_publish_failure_does_not_fail_the_sync(tmp_path, caplog):
     gpx = tmp_path / "a.gpx"
     _write_gpx(gpx)
     store = ResultStore(tmp_path / "db")
     provider = StubProvider([ActivityRef("i200", "2024-07-02", "Run", "B")], gpx,
                             publish_fails=True)
 
-    outcomes = dict(sync(provider, StubService(), store, Config(), "2024-01-01", "2024-12-31",
-                         account_id="acct"))
+    with caplog.at_level(logging.WARNING, logger="pacelab.publish.publisher"):
+        outcomes = dict(sync(provider, StubService(), store, Config(),
+                             "2024-01-01", "2024-12-31", account_id="acct"))
 
+    assert any("publish failed for i200" in r.getMessage() for r in caplog.records)
     assert outcomes["i200"] == "publish-failed"  # analysed and stored, annotation pending
     assert store.is_current("i200", Config().model_version, account_id="acct")
     assert store.needs_publish("i200", Config().model_version, account_id="acct")
