@@ -28,6 +28,7 @@ end to end and idempotent.
 
 - intervals.icu returns **no original for Strava-synced activities**. If the athlete's COROS
   data reaches intervals.icu via Strava, `/file` fails for every activity. Mitigation:
-  download the original with **skip-and-warn** on failure, and verify the real sync path with
+  download the original with **skip-and-log** on failure (at INFO, since a Strava-synced
+  activity has no original on every pass — #29), and verify the real sync path with
   a one-request probe during implementation before writing off the **streams** fallback
   (`/api/v1/activity/{id}/streams`), which stays deferred (ADR-0003 fetch strategy).

@@ -1,4 +1,5 @@
 import gzip
+import logging
 
 import pytest
 
@@ -41,11 +42,17 @@ def test_download_handles_uncompressed_bodies(tmp_path):
     assert provider.download("i102").read_bytes() == FIT_BYTES
 
 
-def test_missing_original_skips_with_a_warning(tmp_path):
+def test_missing_original_is_logged_as_an_expected_skip(tmp_path, caplog):
     # Strava-synced activities have no original → 404 → skip, don't crash (ADR-0008).
+    # It recurs on every listing pass, so it logs at INFO: a steady state, not a fault.
     provider = _provider(HttpResponse(404, b"not found"), tmp_path)
-    with pytest.warns(UserWarning, match="i103"):
+
+    with caplog.at_level(logging.INFO, logger="pacelab.providers.intervals"):
         assert provider.download("i103") is None
+
+    records = [r for r in caplog.records if r.name == "pacelab.providers.intervals"]
+    assert [r.levelno for r in records] == [logging.INFO]
+    assert "i103" in records[0].getMessage()
 
 
 def test_cached_original_is_served_without_a_network_call(tmp_path):

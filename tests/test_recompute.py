@@ -1,5 +1,6 @@
 """The store-driven reconciliation pass (ADR-0016)."""
 
+import logging
 import math
 
 import pytest
@@ -139,15 +140,16 @@ def test_a_provisional_inside_the_lag_is_skipped_not_republished(tmp_path):
     assert store.needs_recompute(config.model_version, ACCOUNT) == ["i100"]  # next pass
 
 
-def test_a_publish_failure_leaves_the_row_for_the_next_pass(tmp_path):
+def test_a_publish_failure_leaves_the_row_for_the_next_pass(tmp_path, caplog):
     # Analysis converges absolutely; publishing retries forever (ADR-0016).
     provider, store = _fixture(tmp_path, publish_fails=True)
     _stranded_provisional(store)
     config = Config()
 
-    with pytest.warns(UserWarning, match="publish failed"):
+    with caplog.at_level(logging.WARNING, logger="pacelab.publish.publisher"):
         outcomes = recompute(provider, ArchiveService(), store, config, ACCOUNT)
 
+    assert any("publish failed" in r.getMessage() for r in caplog.records)
     assert outcomes == [("i100", "publish-failed")]
     assert store.is_current("i100", config.model_version, account_id=ACCOUNT)
     assert store.needs_publish("i100", config.model_version, account_id=ACCOUNT)
@@ -301,7 +303,7 @@ def test_a_settled_corpus_takes_no_snapshot(tmp_path):
     assert taken == []
 
 
-def test_a_publish_only_retry_takes_no_snapshot(tmp_path):
+def test_a_publish_only_retry_takes_no_snapshot(tmp_path, caplog):
     # This row is enumerated every pass until intervals.icu accepts the write, and
     # nothing about it is rewritten. Snapshotting here would fire on a loop.
     provider, store = _fixture(tmp_path, publish_fails=True)
@@ -309,10 +311,11 @@ def test_a_publish_only_retry_takes_no_snapshot(tmp_path):
     store.save("i100", _stub_result(), config.model_version, account_id=ACCOUNT)
     taken = []
 
-    with pytest.warns(UserWarning, match="publish failed"):
+    with caplog.at_level(logging.WARNING, logger="pacelab.publish.publisher"):
         outcomes = recompute(provider, ArchiveService(), store, config, ACCOUNT,
                              before_rewrite=lambda: taken.append("snapshot"))
 
+    assert any("publish failed" in r.getMessage() for r in caplog.records)
     assert outcomes == [("i100", "publish-failed")]
     assert taken == []
     assert provider.downloaded == []

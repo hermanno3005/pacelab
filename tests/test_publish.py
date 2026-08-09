@@ -1,3 +1,5 @@
+import logging
+
 from pacelab.analyze import ActivityResult
 from pacelab.config import Config
 from pacelab.providers.intervals import ActivityRef
@@ -65,15 +67,34 @@ def test_publish_range_publishes_only_what_needs_it(tmp_path):
     assert "i1" in provider.descriptions and "i2" not in provider.descriptions
 
 
-def test_publish_failure_is_contained(tmp_path):
+def test_publish_failure_is_contained(tmp_path, caplog):
     # ADR-0011: publishing is best-effort — a target outage must not raise out.
     store = ResultStore(tmp_path / "db")
     store.save("i1", result(), model_version=VERSION, account_id="acct")
     provider = StubDescriptions(fail=True)
     provider.refs = [ActivityRef("i1", None, "Run", None)]
 
-    outcomes = dict(publish_range(provider, store, Config(),
-                                  "2026-01-01", "2026-12-31", "acct"))
+    with caplog.at_level(logging.WARNING, logger="pacelab.publish.publisher"):
+        outcomes = dict(publish_range(provider, store, Config(),
+                                      "2026-01-01", "2026-12-31", "acct"))
 
     assert outcomes == {"i1": "publish-failed"}
     assert store.needs_publish("i1", VERSION, account_id="acct")  # retried next time
+    assert any("publish failed for i1" in r.getMessage() for r in caplog.records)
+
+
+def test_the_same_activity_failing_every_pass_logs_every_pass(tmp_path, caplog):
+    # ADR-0017: `warnings.warn` printed a given (message, location) once and then went
+    # silent — which hid exactly this case, an activity stuck unpublishable for days.
+    store = ResultStore(tmp_path / "db")
+    store.save("i1", result(), model_version=VERSION, account_id="acct")
+    provider = StubDescriptions(fail=True)
+    provider.refs = [ActivityRef("i1", None, "Run", None)]
+
+    with caplog.at_level(logging.WARNING, logger="pacelab.publish.publisher"):
+        for _ in range(2):
+            publish_range(provider, store, Config(), "2026-01-01", "2026-12-31", "acct")
+
+    logged = [r for r in caplog.records if r.name == "pacelab.publish.publisher"]
+    assert [r.getMessage() for r in logged] == [
+        "publish failed for i1: intervals.icu down"] * 2

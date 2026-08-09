@@ -80,6 +80,12 @@ budget *is* something worth surfacing.
 > The log is UTC because `time.gmtime` pins it, deliberately, so timestamps stay
 > comparable either side of a DST change. Nothing else in this ADR depends on the claim.
 
+> Completed at #29: the swap originally landed in `watch.py` only, leaving the two
+> `warnings.warn` calls the watch loop reaches through — a contained publish failure and a
+> missing original file. Both are now module loggers, at the level their recurrence
+> deserves: `log.warning` for the publish failure, `log.info` for the missing original,
+> which is an expected skip on every listing pass rather than a fault.
+
 The Dockerfile sets `PYTHONUNBUFFERED=1` —
 without it Python block-buffers a non-tty stdout and `docker logs` lags by kilobytes, which
 defeats the purpose.
