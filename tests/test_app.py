@@ -1,7 +1,12 @@
 import math
+from pathlib import Path
 
-from pacelab.app import analyze_file
+import pytest
+
+from pacelab.app import UnsupportedSourceError, adapter_for, analyze_file
 from pacelab.config import Config
+from pacelab.ingest.fit import FitAdapter
+from pacelab.ingest.gpx import GpxAdapter
 from pacelab.weather.conditions import Conditions
 
 
@@ -37,3 +42,16 @@ def test_analyze_file_runs_gpx_end_to_end(tmp_path):
     assert result.distance_m > 400
     assert len(result.segments) >= 1
     assert result.cost_heat > 0  # 20 °C is above the 10 °C reference
+
+
+def test_adapter_is_selected_by_suffix_for_both_formats():
+    assert isinstance(adapter_for(Path("run.fit")), FitAdapter)
+    assert isinstance(adapter_for(Path("run.gpx")), GpxAdapter)
+    # Suffix matching is case-insensitive: exports differ in what they emit.
+    assert isinstance(adapter_for(Path("RUN.FIT")), FitAdapter)
+    assert isinstance(adapter_for(Path("run.GPX")), GpxAdapter)
+
+
+def test_unsupported_suffix_is_refused_up_front():
+    with pytest.raises(UnsupportedSourceError, match=r"\.tcx"):
+        adapter_for(Path("run.tcx"))

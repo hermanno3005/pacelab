@@ -10,6 +10,7 @@ from typing import Protocol
 
 from pacelab.analyze import ActivityResult, analyze
 from pacelab.config import Config
+from pacelab.ingest.base import SourceAdapter
 from pacelab.ingest.fit import FitAdapter
 from pacelab.ingest.gpx import GpxAdapter
 from pacelab.preprocess.pipeline import to_segments
@@ -17,8 +18,15 @@ from pacelab.weather.conditions import Conditions
 from pacelab.weather.enrich import enrich
 
 
+# The source adapter for each file suffix — FIT is primary (ADR-0003), GPX the fallback.
+_ADAPTERS: dict[str, type[SourceAdapter]] = {".fit": FitAdapter, ".gpx": GpxAdapter}
+
 # The formats a source adapter exists for — every other original is cached but not read.
-PARSEABLE_SUFFIXES = {".fit", ".gpx"}
+PARSEABLE_SUFFIXES = frozenset(_ADAPTERS)
+
+
+class UnsupportedSourceError(ValueError):
+    """The file's suffix has no source adapter, so it cannot become a Track."""
 
 
 class ConditionsSource(Protocol):
@@ -26,12 +34,20 @@ class ConditionsSource(Protocol):
         ...
 
 
-def _adapter_for(path: Path):
-    return FitAdapter() if path.suffix.lower() == ".fit" else GpxAdapter()
+def adapter_for(path: Path) -> SourceAdapter:
+    """Pick the source adapter by suffix (case-insensitive); refuse what none can read."""
+    suffix = path.suffix.lower()
+    try:
+        return _ADAPTERS[suffix]()
+    except KeyError:
+        raise UnsupportedSourceError(
+            f"no source adapter for '{suffix or path.name}': "
+            f"expected one of {sorted(PARSEABLE_SUFFIXES)}"
+        ) from None
 
 
 def analyze_file(path: Path, config: Config, source: ConditionsSource) -> ActivityResult:
-    track = _adapter_for(path).parse(path)
+    track = adapter_for(path).parse(path)
     segments = to_segments(track, step_m=config.step_m)
     enriched = enrich(segments, source)
     return analyze(enriched, config)
