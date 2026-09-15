@@ -3,9 +3,10 @@
 Reads ``record`` messages from a Garmin/COROS FIT file into the canonical Track. FIT stores
 latitude/longitude as *semicircles* (int32), converted to degrees here.
 
-NOTE: not yet exercised against a real FIT export — field names below follow the FIT
-Profile ``record`` message, but confirm against an actual COROS/Strava export before relying
-on it (that's the deferred milestone-3 test).
+Records without a position (a watch logging before GPS lock) are dropped, and
+``enhanced_altitude`` is preferred over ``altitude`` where both are present. Exercised
+against the checked-in ``tests/fixtures/short_run.fit``, written to the FIT Profile's
+``record`` message so the same field names and scales apply to a real export.
 """
 
 from pathlib import Path
