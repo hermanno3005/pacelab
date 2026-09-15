@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from pacelab.app import PARSEABLE_SUFFIXES, UnsupportedSourceError, adapter_for, analyze_file
+from pacelab.app import UnsupportedSourceError, adapter_for, analyze_file
 from pacelab.config import Config
 from pacelab.ingest.fit import FitAdapter
 from pacelab.ingest.gpx import GpxAdapter
@@ -55,4 +55,3 @@ def test_adapter_is_selected_by_suffix_for_both_formats():
 def test_unsupported_suffix_is_refused_up_front():
     with pytest.raises(UnsupportedSourceError, match=r"\.tcx"):
         adapter_for(Path("run.tcx"))
-    assert ".tcx" not in PARSEABLE_SUFFIXES
